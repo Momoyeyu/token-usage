@@ -1,15 +1,10 @@
-import type { ClaudeCodeStats, CursorStats, TeamStats } from '../types';
+import type { ClaudeCodeStats, CursorStats } from '../types';
 
 const API_BASE = 'http://localhost:8000/api';
 
 interface ApiResponse<T> {
   success: boolean;
   data: T;
-}
-
-interface MarkdownResponse {
-  success: boolean;
-  markdown: string;
 }
 
 export async function fetchClaudeCodeStats(params?: {
@@ -66,46 +61,4 @@ export async function uploadCursorCsv(
     throw new Error('API returned unsuccessful response');
   }
   return result.data;
-}
-
-export async function mergeTeamStats(files: File[]): Promise<TeamStats> {
-  const formData = new FormData();
-  files.forEach((file) => {
-    formData.append('files', file);
-  });
-
-  const response = await fetch(`${API_BASE}/team/merge`, {
-    method: 'POST',
-    body: formData,
-  });
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
-  const result: ApiResponse<TeamStats> = await response.json();
-  if (!result.success) {
-    throw new Error('API returned unsuccessful response');
-  }
-  return result.data;
-}
-
-export async function exportMarkdown(
-  type: 'personal' | 'team',
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data: any
-): Promise<string> {
-  const response = await fetch(`${API_BASE}/team/export/markdown`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ type, data }),
-  });
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
-  const result: MarkdownResponse = await response.json();
-  if (!result.success) {
-    throw new Error('API returned unsuccessful response');
-  }
-  return result.markdown;
 }

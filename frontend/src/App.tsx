@@ -45,9 +45,14 @@ function App() {
         </div>
       </div>
 
-      {/* Content */}
+      {/* Content - keep both tabs mounted to preserve state */}
       <main className="max-w-5xl mx-auto px-4 py-6">
-        {activeTab === 'personal' ? <PersonalTab /> : <TeamTab />}
+        <div className={activeTab === 'personal' ? '' : 'hidden'}>
+          <PersonalTab />
+        </div>
+        <div className={activeTab === 'team' ? '' : 'hidden'}>
+          <TeamTab />
+        </div>
       </main>
 
       {/* Footer */}

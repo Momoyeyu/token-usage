@@ -4,23 +4,12 @@ import type { ClaudeCodeStats, CursorStats } from '../types';
 interface ActivityHeatmapProps {
   claudeCode: ClaudeCodeStats | null;
   cursor: CursorStats | null;
-  months?: number;
-}
-
-interface DayData {
-  date: string;
-  value: number;
-  level: 0 | 1 | 2 | 3 | 4;
-}
-
-interface WeekData {
-  days: DayData[];
-  monthLabel?: string; // Label to show above this week
 }
 
 type ViewMode = 'claudeCode' | 'cursor' | 'combined';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function getLevel(value: number, max: number): 0 | 1 | 2 | 3 | 4 {
   if (value === 0 || max === 0) return 0;
@@ -37,10 +26,83 @@ function formatTokens(n: number): string {
   return n.toString();
 }
 
-export function ActivityHeatmap({ claudeCode, cursor, months = 3 }: ActivityHeatmapProps) {
+// Get all dates in a year (365 days including today)
+function getYearDates(): { date: Date; dateStr: string }[] {
+  const now = new Date();
+  const dates: { date: Date; dateStr: string }[] = [];
+
+  // Start from 364 days ago (365 days total including today)
+  const start = new Date(now);
+  start.setDate(now.getDate() - 364);
+
+  // End at today
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const current = new Date(start);
+  while (current <= end) {
+    dates.push({
+      date: new Date(current),
+      dateStr: current.toISOString().slice(0, 10),
+    });
+    current.setDate(current.getDate() + 1);
+  }
+
+  return dates;
+}
+
+// Group dates by week (Sun-Sat)
+function groupByWeeks(dates: { date: Date; dateStr: string }[]): { date: Date; dateStr: string }[][] {
+  const weeks: { date: Date; dateStr: string }[][] = [];
+  let currentWeek: { date: Date; dateStr: string }[] = [];
+
+  // Pad the first week if it doesn't start on Sunday
+  if (dates.length > 0) {
+    const firstDay = dates[0].date.getDay();
+    for (let i = 0; i < firstDay; i++) {
+      currentWeek.push({ date: new Date(0), dateStr: '' }); // placeholder
+    }
+  }
+
+  for (const d of dates) {
+    currentWeek.push(d);
+    if (d.date.getDay() === 6) { // Saturday
+      weeks.push(currentWeek);
+      currentWeek = [];
+    }
+  }
+
+  // Push remaining days
+  if (currentWeek.length > 0) {
+    weeks.push(currentWeek);
+  }
+
+  return weeks;
+}
+
+// Get month labels with their starting week index
+function getMonthLabels(weeks: { date: Date; dateStr: string }[][]): { label: string; weekIdx: number }[] {
+  const labels: { label: string; weekIdx: number }[] = [];
+  let lastMonth = -1;
+
+  weeks.forEach((week, weekIdx) => {
+    // Find first valid date in this week
+    const validDay = week.find(d => d.dateStr !== '');
+    if (validDay) {
+      const month = validDay.date.getMonth();
+      if (month !== lastMonth) {
+        labels.push({ label: MONTHS[month], weekIdx });
+        lastMonth = month;
+      }
+    }
+  });
+
+  return labels;
+}
+
+export function ActivityHeatmap({ claudeCode, cursor }: ActivityHeatmapProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('combined');
 
-  const { weeks, maxValue, totalDays, activeDays } = useMemo(() => {
+  const { weeks, monthLabels, maxValue, activeDays, dayValues } = useMemo(() => {
     // Build data maps
     const ccMap: Record<string, number> = {};
     const cuMap: Record<string, number> = {};
@@ -59,220 +121,167 @@ export function ActivityHeatmap({ claudeCode, cursor, months = 3 }: ActivityHeat
       });
     }
 
-    // Generate date range
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setMonth(startDate.getMonth() - months);
-    // Align to start of week (Sunday)
-    startDate.setDate(startDate.getDate() - startDate.getDay());
+    const dates = getYearDates();
+    const weeks = groupByWeeks(dates);
+    const monthLabels = getMonthLabels(weeks);
 
-    // Build weeks with month labels
-    const weeks: WeekData[] = [];
-    let currentWeek: DayData[] = [];
+    // Calculate values
     let maxVal = 0;
     let totalDaysCount = 0;
     let activeDaysCount = 0;
-    let lastLabeledMonth = -1;
+    const dayValues: Record<string, { value: number; level: 0 | 1 | 2 | 3 | 4 }> = {};
 
-    const current = new Date(startDate);
-
-    while (current <= endDate) {
-      const dateStr = current.toISOString().slice(0, 10);
-      const ccVal = ccMap[dateStr] || 0;
-      const cuVal = cuMap[dateStr] || 0;
+    for (const d of dates) {
+      const ccVal = ccMap[d.dateStr] || 0;
+      const cuVal = cuMap[d.dateStr] || 0;
 
       let value = 0;
       switch (viewMode) {
-        case 'claudeCode':
-          value = ccVal;
-          break;
-        case 'cursor':
-          value = cuVal;
-          break;
-        case 'combined':
-        default:
-          value = ccVal + cuVal;
+        case 'claudeCode': value = ccVal; break;
+        case 'cursor': value = cuVal; break;
+        default: value = ccVal + cuVal;
       }
 
       if (value > maxVal) maxVal = value;
       totalDaysCount++;
       if (value > 0) activeDaysCount++;
 
-      currentWeek.push({
-        date: dateStr,
-        value,
-        level: 0,
-      });
-
-      // End of week (Saturday) - push the week
-      if (current.getDay() === 6) {
-        // Determine month label: use the month of the first day of the week
-        const firstDayOfWeek = new Date(currentWeek[0].date);
-        const monthOfFirstDay = firstDayOfWeek.getMonth();
-
-        let monthLabel: string | undefined;
-        if (monthOfFirstDay !== lastLabeledMonth) {
-          monthLabel = MONTHS[monthOfFirstDay];
-          lastLabeledMonth = monthOfFirstDay;
-        }
-
-        weeks.push({
-          days: currentWeek,
-          monthLabel,
-        });
-        currentWeek = [];
-      }
-
-      current.setDate(current.getDate() + 1);
+      dayValues[d.dateStr] = { value, level: 0 };
     }
 
-    // Handle remaining days (incomplete last week)
-    if (currentWeek.length > 0) {
-      const firstDayOfWeek = new Date(currentWeek[0].date);
-      const monthOfFirstDay = firstDayOfWeek.getMonth();
-
-      let monthLabel: string | undefined;
-      if (monthOfFirstDay !== lastLabeledMonth) {
-        monthLabel = MONTHS[monthOfFirstDay];
-      }
-
-      weeks.push({
-        days: currentWeek,
-        monthLabel,
-      });
+    // Calculate levels
+    for (const dateStr of Object.keys(dayValues)) {
+      dayValues[dateStr].level = getLevel(dayValues[dateStr].value, maxVal);
     }
 
-    // Calculate levels based on max value
-    weeks.forEach(week => {
-      week.days.forEach(day => {
-        day.level = getLevel(day.value, maxVal);
-      });
-    });
-
-    return { weeks, maxValue: maxVal, totalDays: totalDaysCount, activeDays: activeDaysCount };
-  }, [claudeCode, cursor, months, viewMode]);
+    return { weeks, monthLabels, maxValue: maxVal, totalDays: totalDaysCount, activeDays: activeDaysCount, dayValues };
+  }, [claudeCode, cursor, viewMode]);
 
   const colorSchemes = {
-    claudeCode: ['bg-gray-100', 'bg-green-200', 'bg-green-400', 'bg-green-500', 'bg-green-700'],
-    cursor: ['bg-gray-100', 'bg-yellow-200', 'bg-yellow-400', 'bg-yellow-500', 'bg-yellow-600'],
-    combined: ['bg-gray-100', 'bg-blue-200', 'bg-blue-400', 'bg-blue-500', 'bg-blue-700'],
+    claudeCode: ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39'],
+    cursor: ['#ebedf0', '#fef08a', '#fde047', '#facc15', '#eab308'],
+    combined: ['#ebedf0', '#9ecae1', '#6baed6', '#3182bd', '#08519c'],
   };
 
   const colors = colorSchemes[viewMode];
 
-  // Cell size and gap
-  const cellSize = 11;
-  const gap = 2;
-  const dayLabelWidth = 28;
-
   return (
     <div className="bg-white rounded-lg shadow p-6">
+      {/* Header */}
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-medium">Activity Heatmap</h3>
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-          <button
-            onClick={() => setViewMode('combined')}
-            className={`px-3 py-1 text-sm rounded-md transition-colors ${
-              viewMode === 'combined' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Combined
-          </button>
-          <button
-            onClick={() => setViewMode('claudeCode')}
-            className={`px-3 py-1 text-sm rounded-md transition-colors ${
-              viewMode === 'claudeCode' ? 'bg-white shadow text-green-600' : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Claude Code
-          </button>
-          <button
-            onClick={() => setViewMode('cursor')}
-            className={`px-3 py-1 text-sm rounded-md transition-colors ${
-              viewMode === 'cursor' ? 'bg-white shadow text-yellow-600' : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Cursor
-          </button>
+          {(['combined', 'claudeCode', 'cursor'] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                viewMode === mode
+                  ? `bg-white shadow ${mode === 'claudeCode' ? 'text-green-600' : mode === 'cursor' ? 'text-yellow-600' : 'text-blue-600'}`
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              {mode === 'claudeCode' ? 'Claude Code' : mode === 'cursor' ? 'Cursor' : 'Combined'}
+            </button>
+          ))}
         </div>
       </div>
 
+      {/* Heatmap */}
       <div className="overflow-x-auto">
-        {/* Month labels row */}
-        <div className="flex text-xs text-gray-400 mb-1" style={{ height: '16px' }}>
-          <div style={{ width: `${dayLabelWidth}px`, flexShrink: 0 }}></div>
-          {weeks.map((week, idx) => (
-            <div
-              key={idx}
-              style={{
-                width: `${cellSize}px`,
-                marginRight: `${gap}px`,
-                flexShrink: 0,
-                fontSize: '10px',
-                overflow: 'visible',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {week.monthLabel || ''}
+        <div style={{ display: 'inline-block' }}>
+          {/* Month labels */}
+          <div style={{ display: 'flex', marginLeft: '32px', marginBottom: '4px' }}>
+            {weeks.map((_, weekIdx) => {
+              const label = monthLabels.find(m => m.weekIdx === weekIdx);
+              return (
+                <div
+                  key={weekIdx}
+                  style={{
+                    width: '12px',
+                    marginRight: '3px',
+                    fontSize: '10px',
+                    color: '#57606a',
+                    overflow: 'visible',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {label?.label || ''}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Grid */}
+          <div style={{ display: 'flex' }}>
+            {/* Day labels */}
+            <div style={{ display: 'flex', flexDirection: 'column', marginRight: '4px' }}>
+              {DAYS.map((day, idx) => (
+                <div
+                  key={day}
+                  style={{
+                    height: '12px',
+                    marginBottom: '3px',
+                    fontSize: '10px',
+                    color: '#57606a',
+                    lineHeight: '12px',
+                    textAlign: 'right',
+                    width: '28px',
+                    visibility: idx % 2 === 1 ? 'visible' : 'hidden',
+                  }}
+                >
+                  {day}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        {/* Grid container */}
-        <div className="flex">
-          {/* Day labels */}
-          <div
-            className="flex flex-col text-xs text-gray-400"
-            style={{ width: `${dayLabelWidth}px`, flexShrink: 0, fontSize: '9px' }}
-          >
-            <div style={{ height: `${cellSize}px` }}></div>
-            <div style={{ height: `${cellSize + gap}px`, display: 'flex', alignItems: 'center' }}>Mon</div>
-            <div style={{ height: `${cellSize + gap}px` }}></div>
-            <div style={{ height: `${cellSize + gap}px`, display: 'flex', alignItems: 'center' }}>Wed</div>
-            <div style={{ height: `${cellSize + gap}px` }}></div>
-            <div style={{ height: `${cellSize + gap}px`, display: 'flex', alignItems: 'center' }}>Fri</div>
-            <div style={{ height: `${cellSize}px` }}></div>
+            {/* Weeks */}
+            <div style={{ display: 'flex', gap: '3px' }}>
+              {weeks.map((week, weekIdx) => (
+                <div key={weekIdx} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  {week.map((day, dayIdx) => {
+                    const isPlaceholder = day.dateStr === '';
+                    const data = dayValues[day.dateStr];
+                    return (
+                      <div
+                        key={dayIdx}
+                        style={{
+                          width: '12px',
+                          height: '12px',
+                          borderRadius: '2px',
+                          backgroundColor: isPlaceholder ? 'transparent' : colors[data?.level || 0],
+                          cursor: isPlaceholder ? 'default' : 'pointer',
+                        }}
+                        title={isPlaceholder ? '' : `${day.dateStr}: ${formatTokens(data?.value || 0)}`}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Heatmap grid */}
-          <div className="flex" style={{ gap: `${gap}px` }}>
-            {weeks.map((week, weekIdx) => (
-              <div key={weekIdx} className="flex flex-col" style={{ gap: `${gap}px` }}>
-                {/* Pad first week if it doesn't start on Sunday */}
-                {weekIdx === 0 && week.days.length < 7 && (
-                  Array(7 - week.days.length).fill(null).map((_, i) => (
-                    <div key={`pad-${i}`} style={{ width: `${cellSize}px`, height: `${cellSize}px` }} />
-                  ))
-                )}
-                {week.days.map((day) => (
-                  <div
-                    key={day.date}
-                    className={`rounded-sm ${colors[day.level]} transition-all hover:scale-125 cursor-pointer`}
-                    style={{ width: `${cellSize}px`, height: `${cellSize}px` }}
-                    title={`${day.date}: ${formatTokens(day.value)}`}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Legend and stats */}
-        <div className="flex items-center justify-between mt-4 text-xs text-gray-500">
-          <div className="flex items-center gap-1">
-            <span>Less</span>
-            {colors.map((color, idx) => (
-              <div
-                key={idx}
-                className={`rounded-sm ${color}`}
-                style={{ width: `${cellSize}px`, height: `${cellSize}px` }}
-              />
-            ))}
-            <span>More</span>
-          </div>
-          <div className="flex gap-4">
-            <span>Active: {activeDays}/{totalDays} days</span>
-            {maxValue > 0 && <span>Peak: {formatTokens(maxValue)}</span>}
+          {/* Legend */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', fontSize: '12px', color: '#57606a' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span>Less</span>
+              {colors.map((color, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    width: '12px',
+                    height: '12px',
+                    borderRadius: '2px',
+                    backgroundColor: color,
+                  }}
+                />
+              ))}
+              <span>More</span>
+            </div>
+            <div style={{ display: 'flex', gap: '16px' }}>
+              <span>{activeDays} active days</span>
+              {maxValue > 0 && <span>Peak: {formatTokens(maxValue)}</span>}
+            </div>
           </div>
         </div>
       </div>

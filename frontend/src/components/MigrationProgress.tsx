@@ -1,18 +1,65 @@
+import type { ClaudeCodeStats, CursorStats } from '../types';
 import { formatTokens, formatPercent, calculateMigrationRatio, getMigrationColor } from '../utils/formatters';
 
 interface MigrationProgressProps {
-  claudeCodeTotal: number;
-  cursorTotal: number;
+  claudeCode: ClaudeCodeStats | null;
+  cursor: CursorStats | null;
 }
 
-export function MigrationProgress({ claudeCodeTotal, cursorTotal }: MigrationProgressProps) {
-  const total = claudeCodeTotal + cursorTotal;
-  const claudeCodePercent = total > 0 ? (claudeCodeTotal / total) * 100 : 0;
-  const migrationRatio = calculateMigrationRatio(claudeCodeTotal, cursorTotal);
+// Get the latest day's data
+function getLatestDayStats(claudeCode: ClaudeCodeStats | null, cursor: CursorStats | null) {
+  const today = new Date().toISOString().slice(0, 10);
+
+  let ccTotal = 0;
+  let cuTotal = 0;
+  let latestDate = today;
+
+  // Find the latest date with data
+  const allDates = new Set<string>();
+  if (claudeCode?.by_day) {
+    Object.keys(claudeCode.by_day).forEach(d => allDates.add(d));
+  }
+  if (cursor?.by_day) {
+    Object.keys(cursor.by_day).forEach(d => allDates.add(d));
+  }
+
+  if (allDates.size > 0) {
+    latestDate = Array.from(allDates).sort().pop() || today;
+  }
+
+  // Get Claude Code value for latest date
+  if (claudeCode?.by_day?.[latestDate]) {
+    const dayData = claudeCode.by_day[latestDate] as any;
+    ccTotal = dayData.total_tokens_with_cache ||
+      ((dayData.input_tokens || 0) + (dayData.output_tokens || 0) +
+       (dayData.cache_creation_input_tokens || 0) + (dayData.cache_read_input_tokens || 0));
+  }
+
+  // Get Cursor value for latest date
+  if (cursor?.by_day?.[latestDate]) {
+    cuTotal = cursor.by_day[latestDate].total_tokens || 0;
+  }
+
+  return { ccTotal, cuTotal, latestDate };
+}
+
+export function MigrationProgress({ claudeCode, cursor }: MigrationProgressProps) {
+  const { ccTotal, cuTotal, latestDate } = getLatestDayStats(claudeCode, cursor);
+
+  const total = ccTotal + cuTotal;
+  const claudeCodePercent = total > 0 ? (ccTotal / total) * 100 : 0;
+  const migrationRatio = calculateMigrationRatio(ccTotal, cuTotal);
+
+  if (total === 0) {
+    return null;
+  }
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
-      <h3 className="text-lg font-medium mb-4">迁移进度</h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-medium">迁移进度</h3>
+        <span className="text-xs text-gray-400">基于 {latestDate} 数据</span>
+      </div>
 
       {/* Progress Bar */}
       <div className="relative h-8 bg-gray-200 rounded-full overflow-hidden mb-4">
@@ -30,11 +77,11 @@ export function MigrationProgress({ claudeCodeTotal, cursorTotal }: MigrationPro
       <div className="flex justify-between text-sm mb-4">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 bg-green-500 rounded" />
-          <span>Claude Code: {formatTokens(claudeCodeTotal)}</span>
+          <span>Claude Code: {formatTokens(ccTotal)}</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 bg-yellow-400 rounded" />
-          <span>Cursor: {formatTokens(cursorTotal)}</span>
+          <span>Cursor: {formatTokens(cuTotal)}</span>
         </div>
       </div>
 
@@ -58,7 +105,7 @@ export function MigrationProgress({ claudeCodeTotal, cursorTotal }: MigrationPro
 
       {migrationRatio >= 100 && (
         <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded text-green-800 text-sm">
-          🎉 Claude Code 使用量已超过 Cursor！迁移进展顺利。
+          Claude Code 使用量已超过 Cursor！
         </div>
       )}
     </div>

@@ -16,18 +16,23 @@ interface TrendChartProps {
   cursor: CursorStats | null;
 }
 
+// Get the last 7 days date range
+function getLast7Days(): string[] {
+  const dates: string[] = [];
+  const today = new Date();
+
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - i);
+    dates.push(date.toISOString().slice(0, 10));
+  }
+
+  return dates;
+}
+
 export function TrendChart({ claudeCode, cursor }: TrendChartProps) {
-  // Merge by_day data from both sources
-  const dateSet = new Set<string>();
-
-  if (claudeCode?.by_day) {
-    Object.keys(claudeCode.by_day).forEach((d) => dateSet.add(d));
-  }
-  if (cursor?.by_day) {
-    Object.keys(cursor.by_day).forEach((d) => dateSet.add(d));
-  }
-
-  const dates = Array.from(dateSet).sort();
+  // Only show the last 7 days
+  const dates = getLast7Days();
 
   if (dates.length === 0) {
     return (
@@ -59,7 +64,7 @@ export function TrendChart({ claudeCode, cursor }: TrendChartProps) {
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
-      <h3 className="text-lg font-medium mb-4">每日 Token 使用趋势</h3>
+      <h3 className="text-lg font-medium mb-4">每日 Token 使用趋势 (近 7 天)</h3>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />

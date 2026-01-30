@@ -8,18 +8,17 @@ import { MigrationProgress } from './MigrationProgress';
 import { ActivityHeatmap } from './ActivityHeatmap';
 import { formatDate } from '../utils/formatters';
 
-// Helper functions for Cursor dashboard URL
+// Helper functions for Cursor dashboard URL (365 days range)
 function getToday(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function getWeekStart(): string {
+function getYearStart(): string {
   const now = new Date();
-  const dayOfWeek = now.getDay();
-  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - daysToMonday);
-  return monday.toISOString().slice(0, 10);
+  // Go back 364 days (365 days total including today)
+  const start = new Date(now);
+  start.setDate(now.getDate() - 364);
+  return start.toISOString().slice(0, 10);
 }
 
 export function PersonalTab() {
@@ -41,13 +40,13 @@ export function PersonalTab() {
     setError(null);
 
     try {
-      // Fetch Claude Code stats
-      const ccStats = await fetchClaudeCodeStats({ week: true });
+      // Fetch Claude Code stats for 1 year
+      const ccStats = await fetchClaudeCodeStats({ days: 365 });
       setClaudeCodeStats(ccStats);
 
-      // If Cursor CSV uploaded, parse it
+      // If Cursor CSV uploaded, parse it without date filter (get all data)
       if (cursorFile) {
-        const cuStats = await uploadCursorCsv(cursorFile, { week: true });
+        const cuStats = await uploadCursorCsv(cursorFile);
         setCursorStats(cuStats);
       }
     } catch (e) {
@@ -76,10 +75,6 @@ export function PersonalTab() {
       setError(e instanceof Error ? e.message : '导出失败');
     }
   };
-
-  const ccTotal = claudeCodeStats?.summary.total_tokens_with_cache ??
-                  claudeCodeStats?.summary.total_tokens ?? 0;
-  const cuTotal = cursorStats?.summary.total_tokens ?? 0;
 
   return (
     <div className="space-y-6">
@@ -120,7 +115,7 @@ export function PersonalTab() {
             <div className="text-sm text-gray-600 mb-2">
               Cursor CSV (可选)
               <a
-                href={`https://cursor.com/cn/dashboard?tab=usage&from=${getWeekStart()}&to=${getToday()}`}
+                href={`https://cursor.com/cn/dashboard?tab=usage&from=${getYearStart()}&to=${getToday()}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="ml-2 text-blue-500 hover:text-blue-700 text-xs"
@@ -186,11 +181,11 @@ export function PersonalTab() {
 
           {/* Migration Progress */}
           {claudeCodeStats && cursorStats && (
-            <MigrationProgress claudeCodeTotal={ccTotal} cursorTotal={cuTotal} />
+            <MigrationProgress claudeCode={claudeCodeStats} cursor={cursorStats} />
           )}
 
           {/* Activity Heatmap */}
-          <ActivityHeatmap claudeCode={claudeCodeStats} cursor={cursorStats} months={3} />
+          <ActivityHeatmap claudeCode={claudeCodeStats} cursor={cursorStats} />
 
           {/* Trend Chart */}
           <TrendChart claudeCode={claudeCodeStats} cursor={cursorStats} />

@@ -317,7 +317,11 @@ def main():
     json_files = []
     if args.json_files:
         for pattern in args.json_files:
-            json_files.extend(Path(".").glob(pattern))
+            p = Path(pattern)
+            if p.is_file():
+                json_files.append(p)
+            else:
+                json_files.extend(Path(".").glob(pattern))
     elif args.dir:
         json_files = list(Path(args.dir).glob("*.json"))
     else:

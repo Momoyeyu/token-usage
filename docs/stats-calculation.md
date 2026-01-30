@@ -26,22 +26,22 @@ Claude Code 的使用数据存储在本地 `~/.claude/` 目录下：
 
 ```mermaid
 flowchart TD
-    A[开始统计] --> B[获取 ~/.claude/projects/ 下所有项目目录]
-    B --> C[遍历每个项目目录]
-    C --> D[读取 sessions-index.json]
-    D --> E[遍历每个会话 entry]
-    E --> F{会话时间在范围内?}
+    A[开始统计] --> B[扫描项目目录]
+    B --> C[遍历项目]
+    C --> D[读取 sessions-index]
+    D --> E[遍历会话]
+    E --> F{时间范围内}
     F -->|否| E
-    F -->|是| G[读取 session-id.jsonl 文件]
-    G --> H[逐行解析 JSON 记录]
-    H --> I{记录类型?}
-    I -->|user| J[统计用户消息数]
-    I -->|assistant| K[提取 usage 数据]
-    K --> L[累加 token 数据]
-    L --> M[按模型/按天分组统计]
+    F -->|是| G[读取 jsonl 文件]
+    G --> H[解析 JSON]
+    H --> I{记录类型}
+    I -->|user| J[统计消息数]
+    I -->|assistant| K[提取 usage]
+    K --> L[累加 token]
+    L --> M[分组统计]
     M --> E
-    E -->|遍历完成| N[汇总所有项目数据]
-    N --> O[输出统计结果]
+    E --> N[汇总数据]
+    N --> O[输出结果]
 ```
 
 ### 1.3 JSONL 文件格式
@@ -148,20 +148,20 @@ Date,User,Kind,Model,Max Mode,Input (w/ Cache Write),Input (w/o Cache Write),Cac
 
 ```mermaid
 flowchart TD
-    A[上传 CSV 文件] --> B[写入临时文件]
-    B --> C[调用 cursor_stats.py 脚本]
-    C --> D[使用 csv.DictReader 解析]
-    D --> E[遍历每行记录]
-    E --> F{检查 Kind 字段}
-    F -->|Errored/No Charge| G[跳过该记录]
-    F -->|On-Demand| H[解析时间戳]
-    H --> I{时间在范围内?}
+    A[上传 CSV] --> B[写入临时文件]
+    B --> C[调用脚本]
+    C --> D[解析 CSV]
+    D --> E[遍历记录]
+    E --> F{Kind 类型}
+    F -->|Errored| G[跳过]
+    F -->|On-Demand| H[解析时间]
+    H --> I{时间范围内}
     I -->|否| E
-    I -->|是| J[解析 token 数据]
-    J --> K[累加到总计]
-    K --> L[按模型/用户/天分组]
+    I -->|是| J[解析 token]
+    J --> K[累加统计]
+    K --> L[分组统计]
     L --> E
-    E -->|遍历完成| M[输出统计结果]
+    E --> M[输出结果]
 ```
 
 ### 2.4 CSV 字段说明
@@ -228,28 +228,24 @@ graph LR
         CC_OUT[output_tokens]
         CC_CW[cache_creation]
         CC_CR[cache_read]
-        CC_TOTAL[total_tokens_with_cache]
-
-        CC_IN --> CC_TOTAL
-        CC_OUT --> CC_TOTAL
-        CC_CW --> CC_TOTAL
-        CC_CR --> CC_TOTAL
+        CC_TOTAL[total_with_cache]
     end
 
     subgraph CU [Cursor]
-        CU_IN_W[Input w/ Cache Write]
+        CU_IN[Input w Cache]
         CU_CR[Cache Read]
-        CU_OUT[Output Tokens]
+        CU_OUT[Output]
         CU_TOTAL[Total Tokens]
-
-        CU_IN_W --> CU_TOTAL
-        CU_CR --> CU_TOTAL
-        CU_OUT --> CU_TOTAL
     end
 
-    CC_TOTAL -. 可对比 .-> CU_TOTAL
-    CC_CR -. 对应 .-> CU_CR
-    CC_OUT -. 对应 .-> CU_OUT
+    CC_IN --> CC_TOTAL
+    CC_OUT --> CC_TOTAL
+    CC_CW --> CC_TOTAL
+    CC_CR --> CC_TOTAL
+    CU_IN --> CU_TOTAL
+    CU_CR --> CU_TOTAL
+    CU_OUT --> CU_TOTAL
+    CC_TOTAL -.-> CU_TOTAL
 ```
 
 ---

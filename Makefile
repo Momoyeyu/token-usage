@@ -7,8 +7,8 @@ all: help
 install: install-backend install-frontend
 
 install-backend:
-	@echo "📦 Installing backend dependencies..."
-	cd backend && pip3 install -r requirements.txt
+	@echo "📦 Installing backend dependencies with uv..."
+	cd backend && uv sync
 
 install-frontend:
 	@echo "📦 Installing frontend dependencies..."
@@ -17,7 +17,7 @@ install-frontend:
 # Start services
 backend:
 	@echo "🚀 Starting backend server on http://localhost:8000..."
-	cd backend && python3 -m uvicorn app.main:app --reload --port 8000
+	cd backend && uv run uvicorn app.main:app --reload --port 8000
 
 frontend:
 	@echo "🚀 Starting frontend dev server on http://localhost:5173..."
@@ -44,12 +44,12 @@ build:
 # Run stats scripts directly
 stats-claude:
 	@echo "📊 Running Claude Code stats..."
-	python3 backend/scripts/claude_code_stats.py --week
+	cd backend && uv run python scripts/claude_code_stats.py --week
 
 stats-cursor:
 	@echo "📊 Running Cursor stats..."
 	@if [ -f output/*.csv ]; then \
-		python3 backend/scripts/cursor_stats.py output/*.csv --week; \
+		cd backend && uv run python scripts/cursor_stats.py ../output/*.csv --week; \
 	else \
 		echo "No CSV files found in output/"; \
 	fi
@@ -58,6 +58,7 @@ stats-cursor:
 clean:
 	@echo "🧹 Cleaning build artifacts..."
 	rm -rf frontend/dist frontend/node_modules/.vite
+	rm -rf backend/.venv
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
 # Help
@@ -66,8 +67,8 @@ help:
 	@echo ""
 	@echo "Setup:"
 	@echo "  make install          Install all dependencies"
-	@echo "  make install-backend  Install backend (Python) dependencies"
-	@echo "  make install-frontend Install frontend (Node) dependencies"
+	@echo "  make install-backend  Install backend (Python via uv)"
+	@echo "  make install-frontend Install frontend (Node)"
 	@echo ""
 	@echo "Development:"
 	@echo "  make backend          Start backend server (port 8000)"

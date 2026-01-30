@@ -1,0 +1,17 @@
+[project]
+name = "usage-stats-dashboard"
+version = "1.0.0"
+description = "Claude Code & Cursor usage statistics dashboard backend"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "python-multipart>=0.0.6",
+    "pydantic>=2.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff",
+    "pytest",
+]

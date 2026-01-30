@@ -245,26 +245,26 @@ Date,User,Kind,Model,Max Mode,Input (w/ Cache Write),Input (w/o Cache Write),Cac
 
 ```mermaid
 flowchart TB
-    subgraph 数据源
-        CC_RAW[~/.claude/projects/*/*.jsonl]
-        CU_RAW[Cursor 导出的 CSV 文件]
+    subgraph DS [数据源]
+        CC_RAW[Claude JSONL]
+        CU_RAW[Cursor CSV]
     end
 
-    subgraph 后端处理
+    subgraph BE [后端处理]
         CC_SCRIPT[claude_code_stats.py]
         CU_SCRIPT[cursor_stats.py]
         SERVICE[stats_service.py]
     end
 
-    subgraph API
+    subgraph API [API]
         CC_API[GET /api/claude-code/stats]
         CU_API[POST /api/cursor/upload]
     end
 
-    subgraph 前端展示
-        TABLE[ComparisonTable<br/>对比表格]
-        TREND[TrendChart<br/>趋势图]
-        HEAT[ActivityHeatmap<br/>热力图]
+    subgraph FE [前端展示]
+        TABLE[ComparisonTable]
+        TREND[TrendChart]
+        HEAT[ActivityHeatmap]
     end
 
     CC_RAW --> CC_SCRIPT

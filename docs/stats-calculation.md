@@ -223,11 +223,11 @@ summary = {
 
 ```mermaid
 graph LR
-    subgraph Claude Code
-        CC_IN[input_tokens<br/>新输入]
-        CC_OUT[output_tokens<br/>输出]
-        CC_CW[cache_creation<br/>缓存写入]
-        CC_CR[cache_read<br/>缓存读取]
+    subgraph CC [Claude Code]
+        CC_IN[input_tokens]
+        CC_OUT[output_tokens]
+        CC_CW[cache_creation]
+        CC_CR[cache_read]
         CC_TOTAL[total_tokens_with_cache]
 
         CC_IN --> CC_TOTAL
@@ -236,11 +236,10 @@ graph LR
         CC_CR --> CC_TOTAL
     end
 
-    subgraph Cursor
-        CU_IN_W[Input w/ Cache Write<br/>输入含缓存写入]
-        CU_IN_WO[Input w/o Cache Write<br/>输入不含缓存写入]
-        CU_CR[Cache Read<br/>缓存读取]
-        CU_OUT[Output Tokens<br/>输出]
+    subgraph CU [Cursor]
+        CU_IN_W[Input w/ Cache Write]
+        CU_CR[Cache Read]
+        CU_OUT[Output Tokens]
         CU_TOTAL[Total Tokens]
 
         CU_IN_W --> CU_TOTAL
@@ -248,9 +247,9 @@ graph LR
         CU_OUT --> CU_TOTAL
     end
 
-    CC_TOTAL -.->|可对比| CU_TOTAL
-    CC_CR -.->|对应| CU_CR
-    CC_OUT -.->|对应| CU_OUT
+    CC_TOTAL -. 可对比 .-> CU_TOTAL
+    CC_CR -. 对应 .-> CU_CR
+    CC_OUT -. 对应 .-> CU_OUT
 ```
 
 ---

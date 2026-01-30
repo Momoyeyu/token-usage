@@ -159,7 +159,7 @@ export function ComparisonTable({ claudeCode, cursor }: ComparisonTableProps) {
       highlight: true,
     },
     {
-      metric: '输入 Token (计费)',
+      metric: '输入 Token',
       tooltip: '实际计费的输入 token（不含缓存读取）\n\nClaude Code: API 返回的 input_tokens\nCursor: Input (w/ Cache Write)',
       claudeCode: stats.claudeCode.input,
       cursor: stats.cursor.input,

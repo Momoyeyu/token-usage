@@ -26,23 +26,31 @@ function formatTokens(n: number): string {
   return n.toString();
 }
 
+// Format date as YYYY-MM-DD in local timezone (not UTC)
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // Get all dates in a year (365 days including today)
 function getYearDates(): { date: Date; dateStr: string }[] {
   const now = new Date();
   const dates: { date: Date; dateStr: string }[] = [];
 
-  // Start from 364 days ago (365 days total including today)
-  const start = new Date(now);
-  start.setDate(now.getDate() - 364);
+  // Normalize to midnight to avoid time comparison issues
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  // End at today
-  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // Start from 364 days ago (365 days total including today)
+  const start = new Date(today);
+  start.setDate(today.getDate() - 364);
 
   const current = new Date(start);
-  while (current <= end) {
+  while (current <= today) {
     dates.push({
       date: new Date(current),
-      dateStr: current.toISOString().slice(0, 10),
+      dateStr: formatLocalDate(current),  // Use local timezone, not UTC
     });
     current.setDate(current.getDate() + 1);
   }
@@ -100,7 +108,8 @@ function getMonthLabels(weeks: { date: Date; dateStr: string }[][]): { label: st
 }
 
 export function ActivityHeatmap({ claudeCode, cursor }: ActivityHeatmapProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>('combined');
+  const hasCursor = !!cursor;
+  const [viewMode, setViewMode] = useState<ViewMode>(hasCursor ? 'combined' : 'claudeCode');
 
   const { weeks, monthLabels, maxValue, activeDays, dayValues } = useMemo(() => {
     // Build data maps
@@ -170,21 +179,23 @@ export function ActivityHeatmap({ claudeCode, cursor }: ActivityHeatmapProps) {
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-medium">Activity Heatmap</h3>
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-          {(['combined', 'claudeCode', 'cursor'] as const).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => setViewMode(mode)}
-              className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                viewMode === mode
-                  ? `bg-white shadow ${mode === 'claudeCode' ? 'text-green-600' : mode === 'cursor' ? 'text-yellow-600' : 'text-blue-600'}`
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              {mode === 'claudeCode' ? 'Claude Code' : mode === 'cursor' ? 'Cursor' : 'Combined'}
-            </button>
-          ))}
-        </div>
+        {hasCursor && (
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+            {(['combined', 'claudeCode', 'cursor'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  viewMode === mode
+                    ? `bg-white shadow ${mode === 'claudeCode' ? 'text-green-600' : mode === 'cursor' ? 'text-yellow-600' : 'text-blue-600'}`
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {mode === 'claudeCode' ? 'Claude Code' : mode === 'cursor' ? 'Cursor' : 'Combined'}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Heatmap */}

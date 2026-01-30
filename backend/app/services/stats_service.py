@@ -172,8 +172,8 @@ def _format_tokens(n: float, with_sign: bool = False) -> str:
 
 def _generate_personal_markdown(data: dict) -> str:
     """Generate personal report markdown"""
-    cc = data.get("claude_code", {})
-    cu = data.get("cursor", {})
+    cc = data.get("claude_code") or {}
+    cu = data.get("cursor") or {}
 
     cc_summary = cc.get("summary", {})
     cu_summary = cu.get("summary", {})
@@ -202,13 +202,40 @@ def _generate_personal_markdown(data: dict) -> str:
     cc_sessions = cc_summary.get("total_sessions", 0)
     cu_requests = cu_summary.get("requests", 0)
 
+    # Check if cursor data exists
+    has_cursor = bool(cu_summary)
+
     # Calculate migration ratio
     migration_ratio = (cc_total / cu_total * 100) if cu_total > 0 else 0
 
     # Get date range
-    start_date = cc_meta.get("start_date", cu_meta.get("start_date", "N/A"))[:10]
-    end_date = cc_meta.get("end_date", cu_meta.get("end_date", "N/A"))[:10]
-    username = cc_meta.get("username", cu_meta.get("username", "Unknown"))
+    start_date = (cc_meta.get("start_date") or cu_meta.get("start_date") or "N/A")[:10]
+    end_date = (cc_meta.get("end_date") or cu_meta.get("end_date") or "N/A")[:10]
+    username = cc_meta.get("username") or cu_meta.get("username") or "Unknown"
+
+    # Build table based on whether cursor data exists
+    if has_cursor:
+        table = f"""| 指标 | Claude Code | Cursor | 差异 |
+|------|-------------|--------|------|
+| Token 总量 | {_format_tokens(cc_total)} | {_format_tokens(cu_total)} | {_format_tokens(cc_total - cu_total, with_sign=True)} |
+| 输入 Token | {_format_tokens(cc_input)} | {_format_tokens(cu_input)} | {_format_tokens(cc_input - cu_input, with_sign=True)} |
+| 缓存写入 Token | {_format_tokens(cc_cache_creation)} | {_format_tokens(cu_cache_creation)} | {_format_tokens(cc_cache_creation - cu_cache_creation, with_sign=True)} |
+| 缓存读取 Token | {_format_tokens(cc_cache_read)} | {_format_tokens(cu_cache_read)} | {_format_tokens(cc_cache_read - cu_cache_read, with_sign=True)} |
+| 输出 Token | {_format_tokens(cc_output)} | {_format_tokens(cu_output)} | {_format_tokens(cc_output - cu_output, with_sign=True)} |
+| 活跃天数 | {cc_days} | {cu_days} | {cc_days - cu_days:+d} |
+| 会话/请求数 | {cc_sessions} | {int(cu_requests)} | {cc_sessions - int(cu_requests):+d} |"""
+        migration_section = f"\n## 迁移进度\n\n**Claude Code / Cursor = {migration_ratio:.1f}%**\n"
+    else:
+        table = f"""| 指标 | Claude Code |
+|------|-------------|
+| Token 总量 | {_format_tokens(cc_total)} |
+| 输入 Token | {_format_tokens(cc_input)} |
+| 缓存写入 Token | {_format_tokens(cc_cache_creation)} |
+| 缓存读取 Token | {_format_tokens(cc_cache_read)} |
+| 输出 Token | {_format_tokens(cc_output)} |
+| 活跃天数 | {cc_days} |
+| 会话数 | {cc_sessions} |"""
+        migration_section = ""
 
     md = f"""# 使用统计报告
 
@@ -218,28 +245,30 @@ def _generate_personal_markdown(data: dict) -> str:
 
 ---
 
-## 对比表格
+## 统计表格
 
-| 指标 | Claude Code | Cursor | 差异 |
-|------|-------------|--------|------|
-| Token 总量 | {_format_tokens(cc_total)} | {_format_tokens(cu_total)} | {_format_tokens(cc_total - cu_total, with_sign=True)} |
-| 输入 Token (计费) | {_format_tokens(cc_input)} | {_format_tokens(cu_input)} | {_format_tokens(cc_input - cu_input, with_sign=True)} |
-| 缓存写入 Token | {_format_tokens(cc_cache_creation)} | {_format_tokens(cu_cache_creation)} | {_format_tokens(cc_cache_creation - cu_cache_creation, with_sign=True)} |
-| 缓存读取 Token | {_format_tokens(cc_cache_read)} | {_format_tokens(cu_cache_read)} | {_format_tokens(cc_cache_read - cu_cache_read, with_sign=True)} |
-| 输出 Token | {_format_tokens(cc_output)} | {_format_tokens(cu_output)} | {_format_tokens(cc_output - cu_output, with_sign=True)} |
-| 活跃天数 | {cc_days} | {cu_days} | {cc_days - cu_days:+d} |
-| 会话/请求数 | {cc_sessions} | {int(cu_requests)} | {cc_sessions - int(cu_requests):+d} |
-
-## 迁移进度
-
-**Claude Code / Cursor = {migration_ratio:.1f}%**
-
+{table}
+{migration_section}
 ---
 
 *报告由 Usage Stats Dashboard 生成*
 
 <!--STATS_DATA
-{{"type": "personal", "version": 1, "username": "{username}", "start_date": "{start_date}", "end_date": "{end_date}", "claude_code": {{"total_tokens_with_cache": {cc_total}, "total_input_tokens": {cc_input}, "total_output_tokens": {cc_output}, "total_cache_creation_tokens": {cc_cache_creation}, "total_cache_read_tokens": {cc_cache_read}, "active_days": {cc_days}, "total_sessions": {cc_sessions}}}, "cursor": {{"total_tokens": {cu_total}, "input_tokens_with_cache": {cu_input}, "input_tokens_without_cache": {cu_summary.get("input_tokens_without_cache", 0)}, "output_tokens": {cu_output}, "cache_read_tokens": {cu_cache_read}, "active_days": {cu_days}, "requests": {cu_requests}}}}}
+{json.dumps({
+    "type": "personal",
+    "version": 2,
+    "username": username,
+    "start_date": start_date,
+    "end_date": end_date,
+    "claude_code": {
+        "summary": cc_summary,
+        "by_day": cc.get("by_day", {})
+    },
+    "cursor": {
+        "summary": cu_summary,
+        "by_day": cu.get("by_day", {})
+    }
+}, ensure_ascii=False)}
 STATS_DATA-->
 """
     return md
@@ -252,8 +281,8 @@ def _generate_team_markdown(data: dict) -> str:
     members = data.get("by_member", {})
     date_range = data.get("date_range", {})
 
-    cc = team.get("claude_code", {})
-    cu = team.get("cursor", {})
+    cc = team.get("claude_code") or {}
+    cu = team.get("cursor") or {}
 
     total_members = meta.get("total_members", 0)
     start_date = (date_range.get("start") or "N/A")[:10]
@@ -262,18 +291,45 @@ def _generate_team_markdown(data: dict) -> str:
     cc_total = cc.get("total_tokens_with_cache", cc.get("total_tokens", 0))
     cu_total = cu.get("total_tokens", 0)
 
-    migration_ratio = (cc_total / cu_total * 100) if cu_total > 0 else 0
+    # Check if cursor data exists
+    has_cursor = cu_total > 0 or cu.get("members", 0) > 0
+
+    # Calculate migration ratio - handle cursor = 0 case
+    if cu_total > 0:
+        migration_ratio_display = f"{(cc_total / cu_total * 100):.1f}%"
+    elif cc_total > 0:
+        migration_ratio_display = "∞ (已完全迁移)"
+    else:
+        migration_ratio_display = "0%"
 
     # Build members table
     members_rows = []
     for name, stats in members.items():
-        cc_member = stats.get("claude_code", {})
-        cu_member = stats.get("cursor", {})
+        cc_member = stats.get("claude_code") or {}
+        cu_member = stats.get("cursor") or {}
         cc_val = cc_member.get("total_tokens_with_cache", cc_member.get("total_tokens", 0)) if cc_member else 0
         cu_val = cu_member.get("total_tokens", 0) if cu_member else 0
-        members_rows.append(f"| {name} | {_format_tokens(cc_val)} | {_format_tokens(cu_val)} |")
+        if has_cursor:
+            members_rows.append(f"| {name} | {_format_tokens(cc_val)} | {_format_tokens(cu_val)} |")
+        else:
+            members_rows.append(f"| {name} | {_format_tokens(cc_val)} |")
 
     members_table = "\n".join(members_rows)
+
+    # Build sections based on whether cursor data exists
+    if has_cursor:
+        overview_table = f"""| 工具 | Token 总量 | 成员数 |
+|------|------------|--------|
+| Claude Code | {_format_tokens(cc_total)} | {cc.get("members", 0)} |
+| Cursor | {_format_tokens(cu_total)} | {cu.get("members", 0)} |"""
+        migration_section = f"\n## 迁移进度\n\n**Claude Code / Cursor = {migration_ratio_display}**\n"
+        members_header = "| 成员 | Claude Code | Cursor |\n|------|-------------|--------|"
+    else:
+        overview_table = f"""| 工具 | Token 总量 | 成员数 |
+|------|------------|--------|
+| Claude Code | {_format_tokens(cc_total)} | {cc.get("members", 0)} |"""
+        migration_section = ""
+        members_header = "| 成员 | Claude Code |\n|------|-------------|"
 
     md = f"""# 团队使用统计报告
 
@@ -285,19 +341,11 @@ def _generate_team_markdown(data: dict) -> str:
 
 ## 总体对比
 
-| 工具 | Token 总量 | 成员数 |
-|------|------------|--------|
-| Claude Code | {_format_tokens(cc_total)} | {cc.get("members", 0)} |
-| Cursor | {_format_tokens(cu_total)} | {cu.get("members", 0)} |
-
-## 迁移进度
-
-**Claude Code / Cursor = {migration_ratio:.1f}%**
-
+{overview_table}
+{migration_section}
 ## 成员明细
 
-| 成员 | Claude Code | Cursor |
-|------|-------------|--------|
+{members_header}
 {members_table}
 
 ---

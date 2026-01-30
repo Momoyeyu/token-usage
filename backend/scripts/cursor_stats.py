@@ -417,10 +417,9 @@ def main():
             hour=0, minute=0, second=0, microsecond=0
         )
     else:
-        # 默认：本周（周一到今天）
+        # 默认：过去一年
         end_date = today
-        days_since_monday = now.weekday()
-        start_date = (now - timedelta(days=days_since_monday)).replace(
+        start_date = (now - timedelta(days=365)).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
 

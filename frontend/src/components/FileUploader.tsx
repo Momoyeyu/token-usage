@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useId } from 'react';
 
 interface FileUploaderProps {
   accept: string;
@@ -15,6 +15,7 @@ export function FileUploader({
   label,
   description,
 }: FileUploaderProps) {
+  const inputId = useId();
   const handleDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
@@ -48,9 +49,9 @@ export function FileUploader({
         multiple={multiple}
         onChange={handleChange}
         className="hidden"
-        id="file-upload"
+        id={inputId}
       />
-      <label htmlFor="file-upload" className="cursor-pointer">
+      <label htmlFor={inputId} className="cursor-pointer">
         <div className="text-gray-600">
           <svg
             className="mx-auto h-12 w-12 text-gray-400"

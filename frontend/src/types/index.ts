@@ -81,58 +81,6 @@ export interface CursorStats {
   }>;
 }
 
-// Team Summary Types
-export interface TeamStats {
-  metadata: {
-    generated_at: string;
-    total_members: number;
-    sources: Array<{
-      file: string;
-      username: string;
-      source: string;
-    }>;
-  };
-  team_summary: {
-    claude_code: {
-      total_input_tokens: number;
-      total_output_tokens: number;
-      total_cache_creation_tokens: number;
-      total_cache_read_tokens: number;
-      total_tokens: number;
-      total_tokens_with_cache: number;
-      total_sessions: number;
-      total_user_messages: number;
-      members: number;
-    };
-    cursor: {
-      total_input_tokens_with_cache: number;
-      total_output_tokens: number;
-      total_tokens: number;
-      total_requests: number;
-      total_records: number;
-      members: number;
-    };
-    combined: {
-      total_tokens: number;
-    };
-  };
-  by_member: Record<string, {
-    claude_code?: {
-      total_tokens: number;
-      total_tokens_with_cache: number;
-      sessions: number;
-    };
-    cursor?: {
-      total_tokens: number;
-      requests: number;
-    };
-  }>;
-  date_range: {
-    start: string | null;
-    end: string | null;
-  };
-}
-
 // Combined data for comparison
 export interface ComparisonData {
   claude_code: ClaudeCodeStats | null;

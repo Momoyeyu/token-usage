@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ClaudeCodeStats, CursorStats } from '../types';
-import { fetchClaudeCodeStats, uploadCursorCsv, exportMarkdown } from '../services/api';
+import { fetchClaudeCodeStats, uploadCursorCsv } from '../services/api';
 import { FileUploader } from './FileUploader';
 import { ComparisonTable } from './ComparisonTable';
 import { TrendChart } from './TrendChart';
@@ -56,24 +56,25 @@ export function PersonalTab() {
     }
   };
 
-  const handleExport = async () => {
-    try {
-      const markdown = await exportMarkdown('personal', {
-        claude_code: claudeCodeStats,
-        cursor: cursorStats,
-      });
+  const handleExport = () => {
+    if (!claudeCodeStats && !cursorStats) return;
 
-      // Download as file
-      const blob = new Blob([markdown], { type: 'text/markdown' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `usage-report-${new Date().toISOString().slice(0, 10)}.md`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '导出失败');
-    }
+    const exportData = {
+      version: 2,
+      exported_at: new Date().toISOString(),
+      claude_code: claudeCodeStats,
+      cursor: cursorStats,
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    // Filename: stats-YYYYMMDD-HHmmss.json
+    const ts = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+    a.download = `stats-${ts}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -91,7 +92,7 @@ export function PersonalTab() {
             onClick={handleExport}
             className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
           >
-            导出 Markdown
+            导出 Json
           </button>
         )}
       </div>

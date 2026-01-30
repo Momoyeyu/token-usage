@@ -1,14 +1,257 @@
 import { useState } from 'react';
-import type { TeamStats } from '../types';
-import { mergeTeamStats, exportMarkdown } from '../services/api';
+import type { ClaudeCodeStats, CursorStats } from '../types';
 import { FileUploader } from './FileUploader';
-import { formatTokens, formatPercent, calculateMigrationRatio, getMigrationColor } from '../utils/formatters';
+import { ComparisonTable } from './ComparisonTable';
+import { TrendChart } from './TrendChart';
+import { MigrationProgress } from './MigrationProgress';
+import { ActivityHeatmap } from './ActivityHeatmap';
+import { formatDate } from '../utils/formatters';
+
+interface ExportedData {
+  version: number;
+  exported_at: string;
+  claude_code: ClaudeCodeStats | null;
+  cursor: CursorStats | null;
+}
+
+interface AggregatedData {
+  claude_code: ClaudeCodeStats | null;
+  cursor: CursorStats | null;
+  team_metadata: {
+    members: number;
+    start_date: string;
+    end_date: string;
+    files: string[];
+  };
+}
+
+// Aggregate multiple exported JSON files
+function aggregateData(files: { name: string; data: ExportedData }[]): AggregatedData {
+  const ccByDay: Record<string, any> = {};
+  const cuByDay: Record<string, any> = {};
+
+  const ccSummary = {
+    total_input_tokens: 0,
+    total_output_tokens: 0,
+    total_cache_creation_tokens: 0,
+    total_cache_read_tokens: 0,
+    total_tokens: 0,
+    total_tokens_with_cache: 0,
+    total_sessions: 0,
+    active_days: 0,
+  };
+
+  const cuSummary = {
+    input_tokens_with_cache: 0,
+    input_tokens_without_cache: 0,
+    cache_read_tokens: 0,
+    output_tokens: 0,
+    total_tokens: 0,
+    requests: 0,
+    records: 0,
+    errored_records: 0,
+    active_days: 0,
+    users_count: 0,
+  };
+
+  const startDates: string[] = [];
+  const endDates: string[] = [];
+  const fileNames: string[] = [];
+
+  for (const { name, data } of files) {
+    fileNames.push(name);
+
+    // Claude Code
+    if (data.claude_code) {
+      const cc = data.claude_code;
+      const sum = cc.summary || {};
+
+      ccSummary.total_input_tokens += sum.total_input_tokens || 0;
+      ccSummary.total_output_tokens += sum.total_output_tokens || 0;
+      ccSummary.total_cache_creation_tokens += sum.total_cache_creation_tokens || 0;
+      ccSummary.total_cache_read_tokens += sum.total_cache_read_tokens || 0;
+      ccSummary.total_tokens_with_cache += sum.total_tokens_with_cache || 0;
+      ccSummary.total_sessions += sum.total_sessions || 0;
+
+      if (cc.metadata?.start_date) startDates.push(cc.metadata.start_date);
+      if (cc.metadata?.end_date) endDates.push(cc.metadata.end_date);
+
+      // Aggregate by_day
+      if (cc.by_day) {
+        for (const [day, dayData] of Object.entries(cc.by_day)) {
+          if (!ccByDay[day]) {
+            ccByDay[day] = {
+              input_tokens: 0,
+              output_tokens: 0,
+              cache_creation_input_tokens: 0,
+              cache_read_input_tokens: 0,
+              total_tokens_with_cache: 0,
+            };
+          }
+          const d = dayData as any;
+          ccByDay[day].input_tokens += d.input_tokens || 0;
+          ccByDay[day].output_tokens += d.output_tokens || 0;
+          ccByDay[day].cache_creation_input_tokens += d.cache_creation_input_tokens || 0;
+          ccByDay[day].cache_read_input_tokens += d.cache_read_input_tokens || 0;
+          ccByDay[day].total_tokens_with_cache += d.total_tokens_with_cache || 0;
+        }
+      }
+    }
+
+    // Cursor
+    if (data.cursor) {
+      const cu = data.cursor;
+      const sum = cu.summary || {};
+
+      cuSummary.input_tokens_with_cache += sum.input_tokens_with_cache || 0;
+      cuSummary.input_tokens_without_cache += sum.input_tokens_without_cache || 0;
+      cuSummary.cache_read_tokens += sum.cache_read_tokens || 0;
+      cuSummary.output_tokens += sum.output_tokens || 0;
+      cuSummary.total_tokens += sum.total_tokens || 0;
+      cuSummary.requests += sum.requests || 0;
+
+      if (cu.metadata?.start_date) startDates.push(cu.metadata.start_date);
+      if (cu.metadata?.end_date) endDates.push(cu.metadata.end_date);
+
+      // Aggregate by_day
+      if (cu.by_day) {
+        for (const [day, dayData] of Object.entries(cu.by_day)) {
+          if (!cuByDay[day]) {
+            cuByDay[day] = {
+              input_tokens_with_cache: 0,
+              output_tokens: 0,
+              total_tokens: 0,
+              requests: 0,
+              records: 0,
+            };
+          }
+          cuByDay[day].input_tokens_with_cache += dayData.input_tokens_with_cache || 0;
+          cuByDay[day].output_tokens += dayData.output_tokens || 0;
+          cuByDay[day].total_tokens += dayData.total_tokens || 0;
+          cuByDay[day].requests += dayData.requests || 0;
+          cuByDay[day].records += dayData.records || 0;
+        }
+      }
+    }
+  }
+
+  // Calculate derived values
+  ccSummary.total_tokens = ccSummary.total_input_tokens + ccSummary.total_output_tokens;
+  ccSummary.active_days = Object.keys(ccByDay).filter(d => ccByDay[d].total_tokens_with_cache > 0).length;
+  cuSummary.active_days = Object.keys(cuByDay).filter(d => cuByDay[d].total_tokens > 0).length;
+
+  const startDate = startDates.length > 0 ? startDates.sort()[0] : '';
+  const endDate = endDates.length > 0 ? endDates.sort().pop()! : '';
+
+  const hasCc = ccSummary.total_tokens_with_cache > 0 || Object.keys(ccByDay).length > 0;
+  const hasCu = cuSummary.total_tokens > 0 || Object.keys(cuByDay).length > 0;
+
+  return {
+    claude_code: hasCc ? {
+      metadata: {
+        generated_at: new Date().toISOString(),
+        start_date: startDate,
+        end_date: endDate,
+        username: 'team',
+        machine: 'aggregated',
+      },
+      summary: ccSummary,
+      by_day: ccByDay,
+      by_model: {},
+      by_project: {},
+    } : null,
+    cursor: hasCu ? {
+      metadata: {
+        generated_at: new Date().toISOString(),
+        start_date: startDate,
+        end_date: endDate,
+        username: 'team',
+        machine: 'aggregated',
+        source: 'cursor',
+        csv_files: [],
+      },
+      summary: cuSummary,
+      by_day: cuByDay,
+      by_model: {},
+      by_user: {},
+    } : null,
+    team_metadata: {
+      members: files.length,
+      start_date: startDate,
+      end_date: endDate,
+      files: fileNames,
+    },
+  };
+}
+
+type ViewMode = 'total' | 'average';
+
+// Apply divisor to stats for average calculation
+function applyDivisor(data: AggregatedData, divisor: number): { claudeCode: ClaudeCodeStats | null; cursor: CursorStats | null } {
+  if (divisor <= 1) {
+    return { claudeCode: data.claude_code, cursor: data.cursor };
+  }
+
+  const claudeCode = data.claude_code ? {
+    ...data.claude_code,
+    summary: {
+      ...data.claude_code.summary,
+      total_input_tokens: Math.round(data.claude_code.summary.total_input_tokens / divisor),
+      total_output_tokens: Math.round(data.claude_code.summary.total_output_tokens / divisor),
+      total_cache_creation_tokens: Math.round(data.claude_code.summary.total_cache_creation_tokens / divisor),
+      total_cache_read_tokens: Math.round(data.claude_code.summary.total_cache_read_tokens / divisor),
+      total_tokens: Math.round(data.claude_code.summary.total_tokens / divisor),
+      total_tokens_with_cache: Math.round(data.claude_code.summary.total_tokens_with_cache / divisor),
+      total_sessions: Math.round(data.claude_code.summary.total_sessions / divisor),
+    },
+    by_day: Object.fromEntries(
+      Object.entries(data.claude_code.by_day).map(([day, dayData]) => [
+        day,
+        {
+          input_tokens: Math.round((dayData.input_tokens || 0) / divisor),
+          output_tokens: Math.round((dayData.output_tokens || 0) / divisor),
+          cache_creation_input_tokens: Math.round(((dayData as any).cache_creation_input_tokens || 0) / divisor),
+          cache_read_input_tokens: Math.round(((dayData as any).cache_read_input_tokens || 0) / divisor),
+          total_tokens_with_cache: Math.round(((dayData as any).total_tokens_with_cache || 0) / divisor),
+        },
+      ])
+    ),
+  } : null;
+
+  const cursor = data.cursor ? {
+    ...data.cursor,
+    summary: {
+      ...data.cursor.summary,
+      input_tokens_with_cache: Math.round(data.cursor.summary.input_tokens_with_cache / divisor),
+      input_tokens_without_cache: Math.round(data.cursor.summary.input_tokens_without_cache / divisor),
+      cache_read_tokens: Math.round(data.cursor.summary.cache_read_tokens / divisor),
+      output_tokens: Math.round(data.cursor.summary.output_tokens / divisor),
+      total_tokens: Math.round(data.cursor.summary.total_tokens / divisor),
+      requests: Math.round(data.cursor.summary.requests / divisor),
+    },
+    by_day: Object.fromEntries(
+      Object.entries(data.cursor.by_day).map(([day, dayData]) => [
+        day,
+        {
+          input_tokens_with_cache: Math.round(dayData.input_tokens_with_cache / divisor),
+          output_tokens: Math.round(dayData.output_tokens / divisor),
+          total_tokens: Math.round(dayData.total_tokens / divisor),
+          requests: Math.round(dayData.requests / divisor),
+          records: Math.round(dayData.records / divisor),
+        },
+      ])
+    ),
+  } : null;
+
+  return { claudeCode, cursor };
+}
 
 export function TeamTab() {
   const [files, setFiles] = useState<File[]>([]);
-  const [teamStats, setTeamStats] = useState<TeamStats | null>(null);
+  const [teamData, setTeamData] = useState<AggregatedData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('total');
 
   const handleUpload = (newFiles: File[]) => {
     setFiles((prev) => [...prev, ...newFiles]);
@@ -21,7 +264,7 @@ export function TeamTab() {
 
   const handleMerge = async () => {
     if (files.length === 0) {
-      setError('请先上传成员报告文件');
+      setError('请先上传成员统计文件');
       return;
     }
 
@@ -29,8 +272,25 @@ export function TeamTab() {
     setError(null);
 
     try {
-      const stats = await mergeTeamStats(files);
-      setTeamStats(stats);
+      // Parse all JSON files
+      const parsedFiles: { name: string; data: ExportedData }[] = [];
+
+      for (const file of files) {
+        const text = await file.text();
+        try {
+          const data = JSON.parse(text) as ExportedData;
+          if (!data.version) {
+            throw new Error('Invalid format');
+          }
+          parsedFiles.push({ name: file.name, data });
+        } catch {
+          throw new Error(`文件 ${file.name} 格式无效，请使用从本系统导出的 JSON 文件`);
+        }
+      }
+
+      // Aggregate data
+      const aggregated = aggregateData(parsedFiles);
+      setTeamData(aggregated);
     } catch (e) {
       setError(e instanceof Error ? e.message : '合并失败');
     } finally {
@@ -38,28 +298,12 @@ export function TeamTab() {
     }
   };
 
-  const handleExport = async () => {
-    if (!teamStats) return;
-
-    try {
-      const markdown = await exportMarkdown('team', teamStats);
-
-      const blob = new Blob([markdown], { type: 'text/markdown' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `team-report-${new Date().toISOString().slice(0, 10)}.md`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '导出失败');
-    }
-  };
-
-  const ccTotal = teamStats?.team_summary.claude_code.total_tokens_with_cache ??
-                  teamStats?.team_summary.claude_code.total_tokens ?? 0;
-  const cuTotal = teamStats?.team_summary.cursor.total_tokens ?? 0;
-  const migrationRatio = calculateMigrationRatio(ccTotal, cuTotal);
+  // Apply divisor based on view mode
+  const divisor = viewMode === 'average' ? (teamData?.team_metadata.members || 1) : 1;
+  const { claudeCode: claudeCodeStats, cursor: cursorStats } = teamData
+    ? applyDivisor(teamData, divisor)
+    : { claudeCode: null, cursor: null };
+  const hasCursor = (cursorStats?.summary?.total_tokens ?? 0) > 0;
 
   return (
     <div className="space-y-6">
@@ -68,16 +312,32 @@ export function TeamTab() {
         <div>
           <h2 className="text-xl font-semibold">团队使用统计</h2>
           <p className="text-gray-500 text-sm">
-            合并团队成员的统计数据，生成汇总报告
+            上传团队成员的统计文件，汇总查看使用情况
           </p>
         </div>
-        {teamStats && (
-          <button
-            onClick={handleExport}
-            className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-          >
-            导出 Markdown
-          </button>
+        {teamData && (
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setViewMode('total')}
+              className={`px-4 py-2 text-sm rounded-md transition-colors ${
+                viewMode === 'total'
+                  ? 'bg-white shadow text-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              总值
+            </button>
+            <button
+              onClick={() => setViewMode('average')}
+              className={`px-4 py-2 text-sm rounded-md transition-colors ${
+                viewMode === 'average'
+                  ? 'bg-white shadow text-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              平均值
+            </button>
+          </div>
         )}
       </div>
 
@@ -85,15 +345,15 @@ export function TeamTab() {
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-lg font-medium mb-4">上传成员数据</h3>
         <p className="text-sm text-gray-500 mb-4">
-          上传各成员导出的 Markdown 报告（.md 文件）
+          上传各成员从「个人统计」页面导出的 JSON 文件
         </p>
 
         <FileUploader
-          accept=".md"
+          accept=".json"
           multiple
           onUpload={handleUpload}
-          label="上传 Markdown 报告"
-          description="上传成员导出的 .md 报告文件"
+          label="上传 JSON 文件"
+          description="支持批量上传多个成员的统计文件"
         />
 
         {files.length > 0 && (
@@ -135,112 +395,33 @@ export function TeamTab() {
         )}
       </div>
 
-      {/* Results */}
-      {teamStats && (
+      {/* Results - Same components as PersonalTab */}
+      {teamData && (
         <>
-          {/* Summary Cards */}
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="text-gray-500 text-sm">团队成员</div>
-              <div className="text-3xl font-bold">{teamStats.metadata.total_members}</div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="text-gray-500 text-sm">Claude Code 使用量</div>
-              <div className="text-3xl font-bold text-green-600">{formatTokens(ccTotal)}</div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="text-gray-500 text-sm">Cursor 使用量</div>
-              <div className="text-3xl font-bold text-yellow-600">{formatTokens(cuTotal)}</div>
+          {/* Team Info */}
+          <div className="bg-white rounded-lg shadow p-4">
+            <div className="flex items-center gap-4 text-sm text-gray-600">
+              <span>数据来源: <strong>{teamData.team_metadata.members}</strong> 位成员</span>
+              <span>•</span>
+              <span>统计周期: {formatDate(teamData.team_metadata.start_date)} ~ {formatDate(teamData.team_metadata.end_date)}</span>
+              <span>•</span>
+              <span>显示: <strong>{viewMode === 'total' ? '团队总值' : '人均值'}</strong></span>
             </div>
           </div>
+
+          {/* Comparison Table */}
+          <ComparisonTable claudeCode={claudeCodeStats} cursor={cursorStats} />
 
           {/* Migration Progress */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-medium mb-4">团队迁移进度</h3>
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <div className="relative h-4 bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className="absolute left-0 top-0 h-full bg-green-500 transition-all duration-500"
-                    style={{ width: `${Math.min((ccTotal / (ccTotal + cuTotal)) * 100, 100)}%` }}
-                  />
-                </div>
-              </div>
-              <div className={`text-2xl font-bold ${getMigrationColor(migrationRatio)}`}>
-                {formatPercent(migrationRatio)}
-              </div>
-            </div>
-            <div className="mt-2 text-sm text-gray-500">
-              Claude Code / Cursor 比值
-            </div>
-          </div>
+          {claudeCodeStats && cursorStats && hasCursor && (
+            <MigrationProgress claudeCode={claudeCodeStats} cursor={cursorStats} />
+          )}
 
-          {/* Member Table */}
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <h3 className="text-lg font-medium p-6 pb-0">成员明细</h3>
-            <table className="min-w-full divide-y divide-gray-200 mt-4">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    成员
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Claude Code
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cursor
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    迁移率
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {Object.entries(teamStats.by_member).map(([name, stats]) => {
-                  const memberCc = stats.claude_code?.total_tokens_with_cache ??
-                                   stats.claude_code?.total_tokens ?? 0;
-                  const memberCu = stats.cursor?.total_tokens ?? 0;
-                  const memberRatio = calculateMigrationRatio(memberCc, memberCu);
+          {/* Activity Heatmap */}
+          <ActivityHeatmap claudeCode={claudeCodeStats} cursor={cursorStats} />
 
-                  return (
-                    <tr key={name}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        {name}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono">
-                        {formatTokens(memberCc)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono">
-                        {formatTokens(memberCu)}
-                      </td>
-                      <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-mono ${getMigrationColor(memberRatio)}`}>
-                        {formatPercent(memberRatio)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Average Stats */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-medium mb-4">人均统计</h3>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="bg-gray-50 p-4 rounded">
-                <div className="text-gray-500 text-sm">人均 Claude Code Token</div>
-                <div className="text-xl font-bold text-green-600">
-                  {formatTokens(ccTotal / Math.max(teamStats.team_summary.claude_code.members, 1))}
-                </div>
-              </div>
-              <div className="bg-gray-50 p-4 rounded">
-                <div className="text-gray-500 text-sm">人均 Cursor Token</div>
-                <div className="text-xl font-bold text-yellow-600">
-                  {formatTokens(cuTotal / Math.max(teamStats.team_summary.cursor.members, 1))}
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Trend Chart */}
+          <TrendChart claudeCode={claudeCodeStats} cursor={cursorStats} />
         </>
       )}
     </div>

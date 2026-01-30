@@ -31,6 +31,7 @@ function getLast7Days(): string[] {
 }
 
 export function TrendChart({ claudeCode, cursor }: TrendChartProps) {
+  const hasCursor = !!cursor;
   // Only show the last 7 days
   const dates = getLast7Days();
 
@@ -83,14 +84,16 @@ export function TrendChart({ claudeCode, cursor }: TrendChartProps) {
             strokeWidth={2}
             dot={{ r: 4 }}
           />
-          <Line
-            type="monotone"
-            dataKey="cursor"
-            name="Cursor"
-            stroke="#eab308"
-            strokeWidth={2}
-            dot={{ r: 4 }}
-          />
+          {hasCursor && (
+            <Line
+              type="monotone"
+              dataKey="cursor"
+              name="Cursor"
+              stroke="#eab308"
+              strokeWidth={2}
+              dot={{ r: 4 }}
+            />
+          )}
         </LineChart>
       </ResponsiveContainer>
     </div>

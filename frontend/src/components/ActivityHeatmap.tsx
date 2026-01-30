@@ -176,54 +176,53 @@ export function ActivityHeatmap({ claudeCode, cursor, months = 3 }: ActivityHeat
       </div>
 
       <div className="overflow-x-auto">
-        <div className="relative">
-          {/* Month labels */}
-          <div className="flex text-xs text-gray-400 mb-1" style={{ paddingLeft: '28px', height: '16px' }}>
-            {monthLabels.map(({ label, position }, idx) => (
-              <span
-                key={idx}
-                style={{
-                  position: 'absolute',
-                  left: `${28 + position * 13}px`,
-                }}
-              >
-                {label}
-              </span>
-            ))}
+        {/* Month labels row */}
+        <div className="flex mb-1">
+          <div style={{ width: '28px' }}></div>
+          <div className="flex gap-[2px]">
+            {weeks.map((week, weekIdx) => {
+              // Find if this week starts a new month
+              const monthLabel = monthLabels.find(m => m.position === weekIdx);
+              return (
+                <div key={weekIdx} className="w-[11px] text-xs text-gray-400" style={{ fontSize: '10px' }}>
+                  {monthLabel ? monthLabel.label : ''}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Grid container */}
+        <div className="flex">
+          {/* Day labels */}
+          <div className="flex flex-col text-xs text-gray-400 pr-1" style={{ width: '24px', fontSize: '9px' }}>
+            <div className="h-[11px]"></div>
+            <div className="h-[11px] flex items-center">Mon</div>
+            <div className="h-[11px]"></div>
+            <div className="h-[11px] flex items-center">Wed</div>
+            <div className="h-[11px]"></div>
+            <div className="h-[11px] flex items-center">Fri</div>
+            <div className="h-[11px]"></div>
           </div>
 
-          {/* Grid container */}
-          <div className="flex">
-            {/* Day labels */}
-            <div className="flex flex-col text-xs text-gray-400 pr-1" style={{ fontSize: '9px' }}>
-              <div className="h-[11px]"></div>
-              <div className="h-[11px] flex items-center">Mon</div>
-              <div className="h-[11px]"></div>
-              <div className="h-[11px] flex items-center">Wed</div>
-              <div className="h-[11px]"></div>
-              <div className="h-[11px] flex items-center">Fri</div>
-              <div className="h-[11px]"></div>
-            </div>
-
-            {/* Heatmap grid */}
-            <div className="flex gap-[2px]">
-              {weeks.map((week, weekIdx) => (
-                <div key={weekIdx} className="flex flex-col gap-[2px]">
-                  {weekIdx === 0 && week.length < 7 && (
-                    Array(7 - week.length).fill(null).map((_, i) => (
-                      <div key={`pad-${i}`} className="w-[11px] h-[11px]" />
-                    ))
-                  )}
-                  {week.map((day) => (
-                    <div
-                      key={day.date}
-                      className={`w-[11px] h-[11px] rounded-sm ${colors[day.level]} transition-all hover:scale-125 cursor-pointer`}
-                      title={`${day.date}: ${formatTokens(day.value)}`}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
+          {/* Heatmap grid */}
+          <div className="flex gap-[2px]">
+            {weeks.map((week, weekIdx) => (
+              <div key={weekIdx} className="flex flex-col gap-[2px]">
+                {weekIdx === 0 && week.length < 7 && (
+                  Array(7 - week.length).fill(null).map((_, i) => (
+                    <div key={`pad-${i}`} className="w-[11px] h-[11px]" />
+                  ))
+                )}
+                {week.map((day) => (
+                  <div
+                    key={day.date}
+                    className={`w-[11px] h-[11px] rounded-sm ${colors[day.level]} transition-all hover:scale-125 cursor-pointer`}
+                    title={`${day.date}: ${formatTokens(day.value)}`}
+                  />
+                ))}
+              </div>
+            ))}
           </div>
         </div>
 

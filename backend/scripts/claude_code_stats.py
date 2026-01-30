@@ -85,6 +85,13 @@ def analyze_jsonl_file(jsonl_path: Path, start_date: datetime, end_date: datetim
             "cache_read_input_tokens": 0,
             "requests": 0,
         }),
+        "by_day": defaultdict(lambda: {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "requests": 0,
+        }),
     }
 
     if not jsonl_path.exists():
@@ -159,6 +166,14 @@ def analyze_jsonl_file(jsonl_path: Path, start_date: datetime, end_date: datetim
                         stats["models_used"][model]["cache_read_input_tokens"] += cache_read
                         stats["models_used"][model]["requests"] += 1
 
+                        # 按天统计
+                        day = timestamp.date().isoformat()
+                        stats["by_day"][day]["input_tokens"] += input_tokens
+                        stats["by_day"][day]["output_tokens"] += output_tokens
+                        stats["by_day"][day]["cache_creation_input_tokens"] += cache_creation
+                        stats["by_day"][day]["cache_read_input_tokens"] += cache_read
+                        stats["by_day"][day]["requests"] += 1
+
                     # 统计助手消息和工具调用
                     content = message.get("content", [])
                     if isinstance(content, list):
@@ -209,8 +224,9 @@ def collect_stats(start_date: datetime, end_date: datetime, username: str = None
         "by_day": defaultdict(lambda: {
             "input_tokens": 0,
             "output_tokens": 0,
-            "sessions": 0,
-            "messages": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "total_tokens_with_cache": 0,
         }),
     }
 
@@ -282,6 +298,19 @@ def collect_stats(start_date: datetime, end_date: datetime, username: str = None
                 for key in ["input_tokens", "output_tokens", "cache_creation_input_tokens",
                            "cache_read_input_tokens", "requests"]:
                     result["by_model"][model][key] += model_stats[key]
+
+            # 按天统计
+            for day, day_stats in session_stats["by_day"].items():
+                result["by_day"][day]["input_tokens"] += day_stats["input_tokens"]
+                result["by_day"][day]["output_tokens"] += day_stats["output_tokens"]
+                result["by_day"][day]["cache_creation_input_tokens"] += day_stats["cache_creation_input_tokens"]
+                result["by_day"][day]["cache_read_input_tokens"] += day_stats["cache_read_input_tokens"]
+                # Calculate total with cache for this day
+                day_total = (day_stats["input_tokens"] + day_stats["output_tokens"] +
+                            day_stats["cache_creation_input_tokens"] + day_stats["cache_read_input_tokens"])
+                result["by_day"][day]["total_tokens_with_cache"] += day_total
+                # Track active days from actual data
+                result["summary"]["active_days"].add(datetime.fromisoformat(day).date())
 
         # 累加到总计
         result["summary"]["total_input_tokens"] += project_stats["input_tokens"]

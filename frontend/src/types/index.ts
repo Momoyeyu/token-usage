@@ -37,7 +37,10 @@ export interface ClaudeCodeStats {
   by_day: Record<string, {
     input_tokens: number;
     output_tokens: number;
-    sessions: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+    requests?: number;
+    sessions?: number;
   }>;
 }
 

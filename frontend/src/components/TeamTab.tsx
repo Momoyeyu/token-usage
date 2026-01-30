@@ -21,7 +21,7 @@ export function TeamTab() {
 
   const handleMerge = async () => {
     if (files.length === 0) {
-      setError('请先上传 JSON 文件');
+      setError('请先上传成员报告文件');
       return;
     }
 
@@ -85,15 +85,15 @@ export function TeamTab() {
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-lg font-medium mb-4">上传成员数据</h3>
         <p className="text-sm text-gray-500 mb-4">
-          上传各成员的 JSON 统计文件（*_claude.json, *_cursor.json）
+          上传各成员导出的 Markdown 报告（.md 文件）
         </p>
 
         <FileUploader
-          accept=".json"
+          accept=".md"
           multiple
           onUpload={handleUpload}
-          label="上传 JSON 文件"
-          description="支持批量上传多个文件"
+          label="上传 Markdown 报告"
+          description="上传成员导出的 .md 报告文件"
         />
 
         {files.length > 0 && (

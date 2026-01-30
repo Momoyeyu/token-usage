@@ -380,7 +380,12 @@ def main():
     csv_files = []
     if args.csv_files:
         for pattern in args.csv_files:
-            csv_files.extend(Path(".").glob(pattern))
+            # Check if it's an actual file path first, then try glob
+            p = Path(pattern)
+            if p.is_file():
+                csv_files.append(p)
+            else:
+                csv_files.extend(Path(".").glob(pattern))
     elif args.dir:
         csv_files = find_csv_files(Path(args.dir))
     else:

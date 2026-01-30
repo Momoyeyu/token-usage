@@ -41,10 +41,11 @@ export function TrendChart({ claudeCode, cursor }: TrendChartProps) {
     const ccDay = claudeCode?.by_day?.[date];
     const cuDay = cursor?.by_day?.[date];
 
-    // For Claude Code, use input + output as daily total (more comparable to Cursor's total)
-    const ccTotal = ccDay
-      ? (ccDay.input_tokens || 0) + (ccDay.output_tokens || 0)
-      : 0;
+    // For Claude Code, use total_tokens_with_cache (includes cache read/write)
+    // This is comparable to Cursor's total_tokens which also includes cache
+    const ccTotal = ccDay?.total_tokens_with_cache ??
+      ((ccDay?.input_tokens || 0) + (ccDay?.output_tokens || 0) +
+       (ccDay?.cache_creation_input_tokens || 0) + (ccDay?.cache_read_input_tokens || 0));
 
     // For Cursor, use total_tokens
     const cuTotal = cuDay?.total_tokens || 0;

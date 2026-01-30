@@ -2,6 +2,7 @@
 Stats Service - Wrapper for existing statistics scripts
 """
 import json
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -10,6 +11,25 @@ from typing import Optional
 
 # Path to scripts directory
 SCRIPTS_DIR = Path(__file__).parent.parent.parent / "scripts"
+
+
+def parse_markdown_report(content: str) -> dict:
+    """
+    Parse a markdown report and extract embedded stats data.
+    Returns the stats data as a dict, or raises ValueError if invalid.
+    """
+    # Look for embedded JSON data in HTML comment
+    pattern = r'<!--STATS_DATA\s*(\{.*?\})\s*STATS_DATA-->'
+    match = re.search(pattern, content, re.DOTALL)
+
+    if match:
+        try:
+            return json.loads(match.group(1))
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in markdown: {e}")
+
+    # Fallback: try to parse from table (less reliable)
+    raise ValueError("No embedded stats data found in markdown. Please use a report exported from this dashboard.")
 
 
 def get_week_date_range() -> tuple[str, str]:
@@ -133,14 +153,21 @@ def generate_markdown_report(data: dict, report_type: str = "personal") -> str:
         return _generate_team_markdown(data)
 
 
-def _format_tokens(n: float) -> str:
+def _format_tokens(n: float, with_sign: bool = False) -> str:
     """Format token number with K/M suffix"""
     n = int(n)
-    if n >= 1_000_000:
-        return f"{n/1_000_000:.2f}M"
-    elif n >= 1_000:
-        return f"{n/1_000:.1f}K"
-    return str(n)
+    prefix = ""
+    if with_sign and n > 0:
+        prefix = "+"
+
+    abs_n = abs(n)
+    sign = "-" if n < 0 else ""
+
+    if abs_n >= 1_000_000:
+        return f"{prefix}{sign}{abs_n/1_000_000:.2f}M"
+    elif abs_n >= 1_000:
+        return f"{prefix}{sign}{abs_n/1_000:.1f}K"
+    return f"{prefix}{n}"
 
 
 def _generate_personal_markdown(data: dict) -> str:
@@ -153,18 +180,27 @@ def _generate_personal_markdown(data: dict) -> str:
     cc_meta = cc.get("metadata", {})
     cu_meta = cu.get("metadata", {})
 
-    # Get values
+    # Get values - matching frontend ComparisonTable fields
     cc_total = cc_summary.get("total_tokens_with_cache", cc_summary.get("total_tokens", 0))
     cu_total = cu_summary.get("total_tokens", 0)
 
     cc_input = cc_summary.get("total_input_tokens", 0)
     cu_input = cu_summary.get("input_tokens_with_cache", 0)
 
+    cc_cache_creation = cc_summary.get("total_cache_creation_tokens", 0)
+    cu_cache_creation = cu_summary.get("input_tokens_with_cache", 0) - cu_summary.get("input_tokens_without_cache", 0)
+
+    cc_cache_read = cc_summary.get("total_cache_read_tokens", 0)
+    cu_cache_read = cu_summary.get("cache_read_tokens", 0)
+
     cc_output = cc_summary.get("total_output_tokens", 0)
     cu_output = cu_summary.get("output_tokens", 0)
 
     cc_days = cc_summary.get("active_days", 0)
     cu_days = cu_summary.get("active_days", 0)
+
+    cc_sessions = cc_summary.get("total_sessions", 0)
+    cu_requests = cu_summary.get("requests", 0)
 
     # Calculate migration ratio
     migration_ratio = (cc_total / cu_total * 100) if cu_total > 0 else 0
@@ -186,10 +222,13 @@ def _generate_personal_markdown(data: dict) -> str:
 
 | 指标 | Claude Code | Cursor | 差异 |
 |------|-------------|--------|------|
-| Token 总量 | {_format_tokens(cc_total)} | {_format_tokens(cu_total)} | {_format_tokens(cc_total - cu_total)} |
-| 输入 Token | {_format_tokens(cc_input)} | {_format_tokens(cu_input)} | - |
-| 输出 Token | {_format_tokens(cc_output)} | {_format_tokens(cu_output)} | - |
-| 活跃天数 | {cc_days} | {cu_days} | - |
+| Token 总量 | {_format_tokens(cc_total)} | {_format_tokens(cu_total)} | {_format_tokens(cc_total - cu_total, with_sign=True)} |
+| 输入 Token (计费) | {_format_tokens(cc_input)} | {_format_tokens(cu_input)} | {_format_tokens(cc_input - cu_input, with_sign=True)} |
+| 缓存写入 Token | {_format_tokens(cc_cache_creation)} | {_format_tokens(cu_cache_creation)} | {_format_tokens(cc_cache_creation - cu_cache_creation, with_sign=True)} |
+| 缓存读取 Token | {_format_tokens(cc_cache_read)} | {_format_tokens(cu_cache_read)} | {_format_tokens(cc_cache_read - cu_cache_read, with_sign=True)} |
+| 输出 Token | {_format_tokens(cc_output)} | {_format_tokens(cu_output)} | {_format_tokens(cc_output - cu_output, with_sign=True)} |
+| 活跃天数 | {cc_days} | {cu_days} | {cc_days - cu_days:+d} |
+| 会话/请求数 | {cc_sessions} | {int(cu_requests)} | {cc_sessions - int(cu_requests):+d} |
 
 ## 迁移进度
 
@@ -198,6 +237,10 @@ def _generate_personal_markdown(data: dict) -> str:
 ---
 
 *报告由 Usage Stats Dashboard 生成*
+
+<!--STATS_DATA
+{{"type": "personal", "version": 1, "username": "{username}", "start_date": "{start_date}", "end_date": "{end_date}", "claude_code": {{"total_tokens_with_cache": {cc_total}, "total_input_tokens": {cc_input}, "total_output_tokens": {cc_output}, "total_cache_creation_tokens": {cc_cache_creation}, "total_cache_read_tokens": {cc_cache_read}, "active_days": {cc_days}, "total_sessions": {cc_sessions}}}, "cursor": {{"total_tokens": {cu_total}, "input_tokens_with_cache": {cu_input}, "input_tokens_without_cache": {cu_summary.get("input_tokens_without_cache", 0)}, "output_tokens": {cu_output}, "cache_read_tokens": {cu_cache_read}, "active_days": {cu_days}, "requests": {cu_requests}}}}}
+STATS_DATA-->
 """
     return md
 

@@ -5,7 +5,22 @@ import { FileUploader } from './FileUploader';
 import { ComparisonTable } from './ComparisonTable';
 import { TrendChart } from './TrendChart';
 import { MigrationProgress } from './MigrationProgress';
+import { ActivityHeatmap } from './ActivityHeatmap';
 import { formatDate } from '../utils/formatters';
+
+// Helper functions for Cursor dashboard URL
+function getToday(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getWeekStart(): string {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - daysToMonday);
+  return monday.toISOString().slice(0, 10);
+}
 
 export function PersonalTab() {
   const [claudeCodeStats, setClaudeCodeStats] = useState<ClaudeCodeStats | null>(null);
@@ -102,7 +117,17 @@ export function PersonalTab() {
             </div>
           </div>
           <div>
-            <div className="text-sm text-gray-600 mb-2">Cursor CSV (可选)</div>
+            <div className="text-sm text-gray-600 mb-2">
+              Cursor CSV (可选)
+              <a
+                href={`https://cursor.com/cn/dashboard?tab=usage&from=${getWeekStart()}&to=${getToday()}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-2 text-blue-500 hover:text-blue-700 text-xs"
+              >
+                去下载 →
+              </a>
+            </div>
             {cursorFile ? (
               <div className="border rounded-lg p-4 bg-yellow-50 border-yellow-200">
                 <div className="flex items-center justify-between">
@@ -127,7 +152,7 @@ export function PersonalTab() {
                 accept=".csv"
                 onUpload={handleCursorUpload}
                 label="上传 Cursor CSV"
-                description="从 Cursor Settings > Usage 导出"
+                description="点击上方链接打开 Cursor Dashboard，点击 Export CSV 下载"
               />
             )}
           </div>
@@ -163,6 +188,9 @@ export function PersonalTab() {
           {claudeCodeStats && cursorStats && (
             <MigrationProgress claudeCodeTotal={ccTotal} cursorTotal={cuTotal} />
           )}
+
+          {/* Activity Heatmap */}
+          <ActivityHeatmap claudeCode={claudeCodeStats} cursor={cursorStats} months={3} />
 
           {/* Trend Chart */}
           <TrendChart claudeCode={claudeCodeStats} cursor={cursorStats} />

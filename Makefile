@@ -17,7 +17,7 @@ install-frontend:
 # Start services
 backend:
 	@echo "🚀 Starting backend server on http://localhost:8000..."
-	cd backend && uvicorn app.main:app --reload --port 8000
+	cd backend && python3 -m uvicorn app.main:app --reload --port 8000
 
 frontend:
 	@echo "🚀 Starting frontend dev server on http://localhost:5173..."

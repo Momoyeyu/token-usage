@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.so
+.env
+venv/
+.venv/
+
+# Node.js
+node_modules/
+dist/
+.npm
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+output/personal/*.json
+output/team/*.json
+output/*.csv
+*.csv
+
+# Keep output directories
+!output/.gitkeep
+!output/personal/.gitkeep
+!output/team/.gitkeep

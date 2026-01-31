@@ -1,4 +1,4 @@
-.PHONY: all backend frontend install install-backend install-frontend clean help
+.PHONY: all backend frontend install install-backend install-frontend clean help run
 
 # Default target
 all: help
@@ -30,7 +30,17 @@ start:
 	@sleep 2
 	@make frontend
 
-# Start with separate terminals (macOS)
+# Start all services in single terminal (recommended)
+run:
+	@if [ ! -d "backend/.venv" ]; then echo "📦 Backend dependencies not found, installing..."; cd backend && uv sync; fi
+	@if [ ! -d "frontend/node_modules" ]; then echo "📦 Frontend dependencies not found, installing..."; cd frontend && npm install; fi
+	@echo "🚀 Starting backend and frontend..."
+	@trap 'kill 0' EXIT; \
+	 (cd backend && uv run uvicorn app.main:app --reload --port 8000 2>&1 | sed 's/^/[backend] /') & \
+	 (cd frontend && npm run dev 2>&1 | sed 's/^/[frontend] /') & \
+	 wait
+
+# Start with separate terminals (macOS, legacy)
 dev:
 	@echo "🚀 Opening backend and frontend in separate terminals..."
 	@osascript -e 'tell app "Terminal" to do script "cd $(PWD) && make backend"'
@@ -71,10 +81,11 @@ help:
 	@echo "  make install-frontend Install frontend (Node)"
 	@echo ""
 	@echo "Development:"
-	@echo "  make backend          Start backend server (port 8000)"
-	@echo "  make frontend         Start frontend dev server (port 5173)"
+	@echo "  make run              Start both services (single terminal, auto-install deps)"
+	@echo "  make backend          Start backend server only (port 8000)"
+	@echo "  make frontend         Start frontend dev server only (port 5173)"
 	@echo "  make start            Start both (backend background, frontend foreground)"
-	@echo "  make dev              Open both in separate Terminal windows (macOS)"
+	@echo "  make dev              Open both in separate Terminal windows (macOS, legacy)"
 	@echo ""
 	@echo "Build:"
 	@echo "  make build            Build frontend for production"

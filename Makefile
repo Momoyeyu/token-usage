@@ -38,6 +38,7 @@ run:
 	@trap 'kill 0' EXIT; \
 	 (cd backend && uv run uvicorn app.main:app --reload --port 8000 2>&1 | sed 's/^/[backend] /') & \
 	 (cd frontend && npm run dev 2>&1 | sed 's/^/[frontend] /') & \
+	 (sleep 3 && open http://localhost:5173) & \
 	 wait
 
 # Start with separate terminals (macOS, legacy)

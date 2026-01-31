@@ -22,20 +22,21 @@ summary/
 
 ## 快速开始
 
-### 后端
-
 ```bash
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+make run
 ```
 
-### 前端
+自动安装依赖、启动前后端服务，并打开浏览器访问 http://localhost:5173
+
+按 `Ctrl+C` 一次性退出所有服务。
+
+### 其他命令
 
 ```bash
-cd frontend
-npm install
-npm run dev
+make help             # 查看所有可用命令
+make backend          # 仅启动后端 (port 8000)
+make frontend         # 仅启动前端 (port 5173)
+make build            # 构建生产版本
 ```
 
 ## 统计脚本（命令行）
